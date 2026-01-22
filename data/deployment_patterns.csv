@@ -1,0 +1,7 @@
+pattern_id,representative_pattern,afr_support,auth_correctness,delegation_correctness,state_isolation,reason
+P1,Role-partitioned indices (per role/domain),Conditional,Conditional,N/A,Conditional,AFR only if routing is perfect; breaks under dynamic roles and cross-role queries; caches/rerankers often shared
+P2,Metadata tag filtering at retrieval,Yes/Conditional,Conditional,N/A,Conditional,Candidate set constrained only to the extent tags are correct and fresh; expressiveness gaps for relationship rules
+P3,Broad retrieve then redact before LLM,No,No,N/A,Conditional,Unauthorized chunks may enter intermediate context or reranking; redaction cannot prove Eq. 1
+P4,Prompt non-disclosure + output filters,No,No,N/A,N/A,Behavioral control only; does not prevent unauthorized context exposure or intermediate influence
+P5,Tool-scoped agents (OAuth/IAM) with unconstrained retrieval,N/A,N/A,Conditional,Conditional,Delegation improved for tools but retrieval path remains an ungoverned data access primitive
+P6,AFR PEP gating retrieval candidates against PDP,Yes,Yes,Conditional/Yes,Conditional,Achieves Eq. 3; auth correctness depends on including all intermediate artifacts in ctx and enforcing inherited delegation

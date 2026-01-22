@@ -1,0 +1,7 @@
+defense_id,defense_family,afr_support,auth_correctness,delegation_correctness,staleness_risk,deployment_complexity,notes,references
+D1,Role-Partitioned Indices,Conditional,Conditional,N/A,High,Low,Index proliferation; breaks under dynamic roles and cross-role queries,"[sandhu1996rbac]"
+D2,Metadata-Tag Filtering,Conditional,Conditional,N/A,High,Low,Tag expressiveness limits; correctness depends on tag freshness,"[bedrock2025]"
+D3,Post-Retrieval Filtering,No,Weak,N/A,Medium,Low,Model already saw data; cannot prove non-influence on reasoning,"[bedrock2025]"
+D4,Prompt Constraints,No,Weak,N/A,N/A,Low,Bypassable via injection; behavioral control only,"[greshake2023,hines2024,yi2025]"
+D5,Tool-Access Controls,N/A,N/A,Conditional,Medium,Medium,Retrieval path not constrained; helps delegation only,"[bedrock2025,opa2024,zanzibar2019]"
+D6,AFR-Oriented,Yes,Strong,Strong,Low,High,Runtime RBAC resolution; satisfies Definition 1-3,"[proposed_pattern]"

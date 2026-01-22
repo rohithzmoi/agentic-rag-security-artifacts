@@ -1,0 +1,34 @@
+============================================================
+SUMMARY STATISTICS - SoK Authorization in Multi-Agent RAG
+============================================================
+
+O1: Defense families that CANNOT satisfy AFR: 2
+    - D3: Post-Retrieval Filtering
+    - D4: Prompt Constraints
+
+O2: Defense families with CONDITIONAL AFR: 2
+    - D1: Role-Partitioned Indices (Index proliferation; breaks under dynamic roles and cross-role queries)
+    - D2: Metadata-Tag Filtering (Tag expressiveness limits; correctness depends on tag freshness)
+
+O3: Defense families with NO delegation correctness: 0
+
+O4: Deployment patterns with FULL AFR support: 1
+    - AFR PEP gating retrieval candidates against PDP
+
+O5: NEGATIVE RESULT VERIFICATION
+    Checking for patterns with AFR + Delegation + State Isolation...
+    CONFIRMED: No pattern achieves all three properties simultaneously
+    (AFR PEP pattern achieves AFR+Auth but State Isolation remains Conditional)
+
+FAILURE MODES CLASSIFIED:
+    F1: Semantic Overfetch
+    F2: Cross-Domain Synthesis Leakage
+    F3: Delegation Escalation
+    F4: Implicit Leakage
+    F5: Audit Incompleteness
+    Total failure modes: 5
+
+============================================================
+All statistics derived from systematization data.
+See paper Sections 6-8 for full analysis.
+============================================================
