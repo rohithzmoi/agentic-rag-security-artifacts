@@ -21,7 +21,7 @@ artifacts/
 
 ```bash
 # Install dependencies
-cd artifacts/scripts
+cd scripts
 pip install -r requirements.txt
 
 # Generate tables and statistics
