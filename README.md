@@ -65,8 +65,7 @@ The statistics output verifies the paper's key observations:
 
 The full LaTeX source is in the parent directory:
 
-- `paper_usenix.tex` - Main paper source (anonymous)
-- `paper_usenix_non_anonymous.tex` - De-anonymized version
+- `paper_usenix.tex` - Main paper source
 - `usenix-2020-09.sty` - USENIX style file
 
 ## License
