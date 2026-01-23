@@ -167,7 +167,7 @@ A system is authorization-correct if, for every user $u$, query $q$, agent chain
   \forall c \in \mathrm{ctx}(u,q,\mathcal{A}):\ &\mathrm{authorize}(u,c) = \mathrm{true} \label{eq:auth-correct-ctx}\\
   \forall a \in \mathcal{A}:\ &\mathrm{perm}(a) \subseteq \mathrm{perm}(u) \label{eq:auth-correct-agent}
 \end{align}
-where $\mathrm{ctx}(u,q,\mathcal{A})$ is the set of all information units, including raw retrieval chunks, intermediate agent outputs, tool results, and derived artifacts (e.g., summaries, temporary tables), that reach any model context window used for generation or reasoning across the agent chain $\mathcal{A}$. We adopt a conservative provenance rule: if an information unit $c'$ is derived from a restricted source $c$, then $c'$ is authorized for $u$ only if $c$ is authorized for $u$, unless the system can prove that $c'$ is a policy-compliant transformation (e.g., redaction or aggregation).
+where $\mathrm{ctx}(u,q,\mathcal{A})$ is the set of all information units, including raw retrieval chunks, intermediate agent outputs, tool results, and derived artifacts (e.g., summaries, temporary tables), that reach any model context window used for generation or reasoning across the agent chain $\mathcal{A}$. We adopt a conservative provenance rule: if an information unit $c'$ is derived from a restricted source $c$, then $c'$ is authorized for $u$ only if $c$ is authorized for $u$, unless the system can prove that $c'$ is a policy-compliant transformation. Policy-compliant transformations include aggregations, redactions, or summaries that are provably non-revealing with respect to restricted attributes under the enterprise policy (e.g., a count that hides individual values, or a summary that omits confidential details).
 
 \subsection{Delegation Correctness}
 
@@ -183,22 +183,24 @@ A retrieval pipeline satisfies AFR if, for every user $u$ and query $q$, the sem
 \begin{align}
   \forall c \in \mathrm{cand}(q,u):\ &\mathrm{authorize}(u,c) = \mathrm{true}. \label{eq:afr}
 \end{align}
-Here $\mathrm{cand}(q,u)$ denotes all units admitted past the PEP into any model context, including retrieval results after any reranking or expansion stage. Once AFR holds, $\mathrm{cand}(q,u) \subseteq \mathrm{ctx}(u,q,\mathcal{A})$ for all agent chains $\mathcal{A}$.
+Here $\mathrm{cand}(q,u)$ denotes the post-PEP candidate set: all information units admitted past the Policy Enforcement Point into any model context, including retrieval results after any reranking or expansion stage. Once AFR holds, $\mathrm{cand}(q,u) \subseteq \mathrm{ctx}(u,q,\mathcal{A})$ for all agent chains $\mathcal{A}$.
 
-\textbf{Proposition 1 (AFR is necessary for authorization correctness under context exposure).}
+\textbf{Observation 1 (AFR is necessary for authorization correctness under context exposure).}
 If a system allows any unauthorized chunk to enter any model context prior to generation or intermediate reasoning, then the system cannot guarantee Eq.~\ref{eq:auth-correct-ctx} for all queries under Definition~1, even if it applies post-hoc output filtering.
 
-In particular, any defense that performs unrestricted semantic retrieval followed by later filtering violates AFR by construction and therefore cannot guarantee Definition~1.
+In particular, any defense that performs unrestricted semantic retrieval followed by later filtering violates AFR by construction. Under the context-exposure model and without a formal non-influence guarantee, post-hoc filtering is insufficient to establish Eq.~\ref{eq:auth-correct-ctx} as a system guarantee for arbitrary queries.
 
-\textbf{Discussion.} The proposition holds because downstream filters cannot prove non-influence: the model may have already incorporated restricted information into intermediate summaries, plans, reranking decisions, or derived artifacts that reach subsequent contexts in the agent chain. Formally, under Definition~1's provenance rule, any derived artifact reachable from an unauthorized chunk is itself unauthorized unless the system can certify a policy-compliant transformation.
+\textbf{Discussion.} The observation holds because downstream filters cannot prove non-influence: the model may have already incorporated restricted information into intermediate summaries, plans, reranking decisions, or derived artifacts that reach subsequent contexts in the agent chain. Formally, under Definition~1's provenance rule, any derived artifact reachable from an unauthorized chunk is itself unauthorized unless the system can certify a policy-compliant transformation.
 
-\textbf{Limitation.} AFR prevents unauthorized \emph{context injection} but does not prevent \emph{shared-state leakage} (e.g., caches, adaptive rerankers, cross-user logs). Addressing shared-state leakage requires isolation or policy-aware caching, which we treat as an open problem.
+\textbf{Scope of necessity.} This necessity holds under the widely deployed \emph{context-exposure model} where intermediate retrieval, reranking, and planning artifacts are visible to the model and can plausibly influence downstream outputs. We do not claim AFR is the only possible correctness condition under hypothetical non-influence architectures or formally verified sanitization models. However, we are not aware of deployed RAG systems that provide such guarantees.
+
+\textbf{Limitation.} AFR prevents unauthorized \emph{context injection} but does not prevent \emph{shared-state leakage} (e.g., caches, adaptive rerankers, cross-user logs). Additionally, AFR does not address embedding-level attacks such as membership inference~\cite{hayes2019mia} or index poisoning~\cite{zou2024poisonedrag}. Addressing shared-state leakage requires isolation or policy-aware caching, which we treat as an open problem.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Taxonomy of Authorization Failure Modes}
 \label{sec:failure-taxonomy}
 
-This section systematizes failure modes observed or implied by common RAG architectures.
+This section systematizes failure modes that follow directly from widely deployed RAG architectures. These failure modes are discussed in vendor documentation, architecture guidance, and practitioner reports. For example, cloud provider documentation (e.g., AWS Bedrock~\cite{bedrock2025}) and vector database APIs commonly implement authorization primarily via metadata filtering, which inherits expressiveness and freshness limitations that can lead to authorization gaps.
 
 \subsection{F1: Semantic Overfetch}
 
@@ -328,6 +330,14 @@ A SoK should do more than list defenses: it should expose which guarantees are c
 
 Table~\ref{tab:matrix} summarizes defense families. As shown, post-hoc filtering and prompt constraints cannot satisfy AFR by construction.
 
+\textbf{Evaluation rubric.} The table ratings are derived from structural analysis of each defense family against the formal definitions:
+\begin{itemize}
+  \item \textbf{AFR}: whether unauthorized chunks can enter any model context (Yes = structurally prevented; No = not prevented; Cond. = depends on configuration or metadata correctness).
+  \item \textbf{Auth}: whether Definition~1 (authorization correctness) is satisfied by construction (Strong = provably satisfied; Weak = not provable; Cond. = depends on external factors).
+  \item \textbf{Deleg}: whether Definition~2 (inherited delegation) is enforced (Strong = enforced by architecture; Cond. = depends on tool/agent configuration).
+  \item \textbf{Stale}: risk of stale permissions affecting retrieval (High/Med/Low based on dependency on cached or pre-indexed metadata).
+\end{itemize}
+
 \begin{table*}[t]
 \centering
 \small
@@ -407,7 +417,7 @@ This section presents a canonical leakage pattern to illustrate F1 (semantic ove
 \textbf{Defense Analysis.}
 \begin{itemize}
   \item \textbf{D1/D2:} May prevent retrieval if tags/indices are correctly configured and fresh.
-  \item \textbf{D3:} Filters restricted chunks after retrieval; model reasoning may already be influenced.
+  \item \textbf{D3:} Filters restricted chunks after retrieval; model reasoning can plausibly be influenced. Prior work shows LLM outputs are sensitive to ordering and salience of context inputs~\cite{liu2024ipi}.
   \item \textbf{D4:} Instructs model not to disclose; bypassable or inconsistent.
   \item \textbf{D6:} Authorization filter rejects restricted chunks before they enter model context.
 \end{itemize}
@@ -484,11 +494,9 @@ Figure~\ref{fig:arch} illustrates an AFR-oriented architecture that is sufficien
 
 The comparative analysis shows a persistent gap: widely deployed stacks often lack AFR, inherited delegation enforcement, or isolation of shared retrieval-time state. The open problems below are organized around closing this gap while preserving practical latency and usability constraints.
 
-\textbf{Latency-security tradeoff at scale.} Enforcing AFR requires authorization checks on retrieval candidates before LLM access. For a typical top-100 retrieval with 1,000+ initial candidates, resolving RBAC permissions in under 100ms is a massive engineering hurdle. Pre-computation of user scope projections, batched authorization checks, and edge-cached permission graphs are potential directions, but we are not aware of published systems that demonstrate AFR at enterprise scale with end-to-end latency comparable to production RAG deployments.
+\subsection{Research Challenges}
 
-\textbf{The broken chunk problem.} Naive chunking strategies split documents at fixed token boundaries. A single paragraph may contain both authorized and unauthorized information (e.g., ``Bob is on Project Alpha [public] and received a performance evaluation note [restricted]''). This creates partial-access failures where filtering the chunk loses authorized content, but including it leaks restricted content. Semantic chunking aligned with field-level authorization boundaries is an open problem.
-
-\textbf{Delegation-aware auditing.} Agentic systems generate massive audit logs. A single user query may trigger dozens of agent invocations and thousands of authorization checks. Summarizing delegation chains into human-readable compliance reports is an open UX and systems question.
+These problems require new theoretical frameworks or measurement approaches.
 
 \textbf{Implicit leakage measurement.} How to quantify leakage through synthesis and inference when explicit chunks are filtered? This requires new metrics beyond chunk-level authorization, potentially drawing on differential privacy or information-theoretic notions.
 
@@ -496,7 +504,17 @@ The comparative analysis shows a persistent gap: widely deployed stacks often la
 
 \textbf{Attenuated delegation and the Confused Deputy.} Definition 2 inherits the full user scope $\mathrm{perm}(u)$ to all agents. This may violate least privilege and enables the classic \emph{Confused Deputy problem}: an agent performing a narrow task (e.g., calendar lookup) should not inherit the user's full HR data access, yet it may inadvertently invoke tools with broader scope. A refined model would use \emph{attenuated delegation}: $\mathrm{perm}(a_n) = \mathrm{perm}(u) \cap \mathrm{scope}(\mathrm{task}_n)$, where $\mathrm{scope}(\mathrm{task}_n)$ is the minimal permission set required for agent $a_n$'s current task. Defining and enforcing task-scoped permissions in agentic workflows, preventing agents from becoming confused deputies, is an open problem.
 
-\textbf{Dynamic policy resolution and mid-conversation staleness.} In multi-agent RAG, a user's permissions may change mid-conversation. For example, temporary project access may expire, a role may be revoked, or a new sensitivity label may be applied to a document. If the PEP caches authorization decisions across turns, stale permissions can violate AFR even if the initial retrieval was correct. Conversely, re-querying the PDP on every turn introduces latency and may create inconsistent user experiences. Determining how to balance freshness, latency, and consistency in dynamic policy resolution remains an open systems challenge. This staleness dimension (noted in Table~\ref{tab:matrix}) is particularly acute for long-running agentic sessions that span hours or days.
+\subsection{Engineering Gaps Lacking Deployment at Scale}
+
+These problems are well-understood conceptually but lack widely deployed solutions.
+
+\textbf{Latency-security tradeoff at scale.} Enforcing AFR requires authorization checks on retrieval candidates before LLM access. For a typical top-100 retrieval with 1,000+ initial candidates, resolving RBAC permissions in under 100ms is a massive engineering hurdle. Pre-computation of user scope projections, batched authorization checks, and edge-cached permission graphs are potential directions, but we are not aware of published systems that demonstrate AFR at enterprise scale with end-to-end latency comparable to production RAG deployments.
+
+\textbf{The broken chunk problem.} Naive chunking strategies split documents at fixed token boundaries. A single paragraph may contain both authorized and unauthorized information (e.g., ``Bob is on Project Alpha [public] and received a performance evaluation note [restricted]''). This creates partial-access failures where filtering the chunk loses authorized content, but including it leaks restricted content. Semantic chunking aligned with field-level authorization boundaries is an open problem.
+
+\textbf{Delegation-aware auditing.} Agentic systems generate massive audit logs. A single user query may trigger dozens of agent invocations and thousands of authorization checks. Summarizing delegation chains into human-readable compliance reports is an open UX and systems question.
+
+\textbf{Dynamic policy resolution and mid-conversation staleness.} In multi-agent RAG, a user's permissions may change mid-conversation. For example, temporary project access may expire, a role may be revoked, or a new sensitivity label may be applied to a document. If the PEP caches authorization decisions across turns, stale permissions can violate AFR even if the initial retrieval was correct. Conversely, re-querying the PDP on every turn introduces latency and may create inconsistent user experiences. Determining how to balance freshness, latency, and consistency in dynamic policy resolution remains an open systems challenge.
 
 \textbf{Integration with existing policy engines.} How to adapt ReBAC/ABAC systems (OpenFGA, OPA, Zanzibar) for semantic retrieval workloads? These systems assume structured request-response patterns; vector similarity queries require new abstractions.
 
@@ -517,6 +535,8 @@ The comparative analysis shows a persistent gap: widely deployed stacks often la
 \textbf{Vector security.} Hayes et al.~\cite{hayes2019mia} demonstrated membership inference attacks on generative model embeddings. Zou et al.~\cite{zou2024poisonedrag} showed vector database poisoning in RAG. Dwork et al.~\cite{dwork2006dp} established differential privacy foundations relevant to implicit leakage. These works address orthogonal but compounding risks.
 
 \textbf{Access control foundations.} Sandhu et al.~\cite{rbac-original} and Ferraiolo and Kuhn~\cite{rbac-foundations} established RBAC theory.
+
+\textbf{Relation to information flow control (IFC).} AFR shares conceptual lineage with IFC and taint tracking: both aim to prevent unauthorized information from influencing downstream computation. However, AFR is a weaker, more practical constraint. Full IFC would track information flow through all model parameters and intermediate states, which is intractable for current LLMs. AFR instead enforces an \emph{input-ordering constraint}: unauthorized information never enters the retrieval-to-generation pipeline. This is analogous to database inference control~\cite{denning1979tracker}, which prevents statistical queries from leaking individual records, but applied to semantic retrieval. We do not claim AFR subsumes IFC; rather, AFR is a deployable approximation for the RAG setting.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
@@ -545,6 +565,10 @@ This work systematizes existing knowledge about authorization in RAG systems. It
 \label{sec:open-science}
 
 This paper is a systematization; the primary artifact is the paper itself. To support reproducibility of the systematization claims, we provide an artifact package containing the raw data, reproducibility scripts, and classification rubrics used to derive Tables~\ref{tab:matrix} and~\ref{tab:systems}.
+
+\textbf{Artifact contents.} The artifact package includes: (i) vendor documentation analysis worksheets summarizing authorization capabilities and limitations for each system evaluated, (ii) the scoring rubric used to derive guarantee ratings in Tables~\ref{tab:matrix} and~\ref{tab:systems}, (iii) system trace examples for each violation pattern (D3, D4, broad-retrieve-then-redact), and (iv) code snippets demonstrating each defense family's enforcement pattern.
+
+\textbf{Reproducibility.} Running \texttt{make tables} regenerates Tables~\ref{tab:matrix} and~\ref{tab:systems} from the worksheets and rubric.
 
 \textbf{Artifact availability.} The artifact package is available at the time of submission for peer review at: \url{https://anonymous.4open.science/r/agentic-rag-security-artifacts-4E40}
 
@@ -641,6 +665,11 @@ LOGAN: Membership Inference Attacks Against Generative Models.
 Zou, W., Geng, R., Wang, B., and Jia, J.
 PoisonedRAG: Knowledge Poisoning Attacks to Retrieval-Augmented Generation of Large Language Models.
 \emph{arXiv:2402.07867}, 2024.
+
+\bibitem{denning1979tracker}
+Denning, D.~E., Denning, P.~J., and Schwartz, M.~D.
+The Tracker: A Threat to Statistical Database Security.
+\emph{ACM Transactions on Database Systems}, 4(1):76--96, 1979.
 
 \end{thebibliography}
 

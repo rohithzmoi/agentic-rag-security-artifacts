@@ -21,11 +21,17 @@ artifacts/
 
 ```bash
 # Install dependencies
-cd scripts
-pip install -r requirements.txt
+cd /
+pip install -r scripts/requirements.txt
 
 # Generate tables and statistics
-python generate_tables.py
+make tables
+```
+
+Alternatively, run the Python script directly:
+
+```bash
+cd scripts && python generate_tables.py
 ```
 
 ## Expected Outputs
