@@ -11,6 +11,10 @@ artifacts/
 │   ├── defense_families.csv  # Table 1 source data (D1-D6)
 │   ├── deployment_patterns.csv # Table 2 source data (P1-P6)
 │   └── failure_modes.csv     # Failure modes F1-F5
+├── screenshots/              # Illustrative demonstration materials
+│   ├── README.md             # Reproducibility details
+│   ├── direct-prompt.png     # Figure 1: Direct prompt leakage
+│   └── indirect-prompt.png   # Figure 2: Indirect prompt leakage
 ├── scripts/
 │   ├── generate_tables.py    # Regenerates tables + statistics
 │   └── requirements.txt      # Python dependencies
@@ -51,6 +55,7 @@ All data is derived from the paper's systematization:
 | `defense_families.csv` | Section 7, Table 1 | Defense families D1-D6 with AFR/Auth/Deleg guarantees |
 | `deployment_patterns.csv` | Section 8, Table 2 | Representative deployment patterns P1-P6 |
 | `failure_modes.csv` | Section 6 | Authorization failure modes F1-F5 |
+| `screenshots/` | Section 9.2, Figures 1-2 | Illustrative demonstration of F1/F2/F4 failure modes |
 
 ## Verification
 

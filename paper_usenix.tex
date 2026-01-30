@@ -433,7 +433,7 @@ This case study illustrates why AFR provides stronger guarantees than post-hoc f
 
 \subsection{Illustrative Demonstration}
 
-We further illustrate these failure modes using a public reference implementation (AegisRAG), which demonstrates both direct and indirect leakage under post-filtered retrieval. We emphasize that this prototype is illustrative and not intended as a benchmark. Its purpose is to concretize failure modes discussed in Sections~\ref{sec:failure-taxonomy} and~\ref{sec:defense-taxonomy}.
+We further illustrate these failure modes using a reference implementation that demonstrates both direct and indirect leakage under post-filtered retrieval. We emphasize that this prototype is illustrative and not intended as a benchmark. Its purpose is to concretize failure modes discussed in Sections~\ref{sec:failure-taxonomy} and~\ref{sec:defense-taxonomy}. The implementation itself is not included in the anonymous artifact bundle; we provide the prompts, role settings, and representative outputs shown in the figures.
 
 \textbf{Direct leakage (Figure~\ref{fig:direct}).} A user queries: ``What is Bob's salary?'' Under vanilla RAG (no authorization), the system discloses the salary. In this instance, retrieve-then-filter (D3) blocks the explicit disclosure because the filter catches the unauthorized chunks before generation. However, this does not provide a structural guarantee---it succeeds here only because the query explicitly requests restricted content and no learned component (e.g., LLM reranker) consumed the unfiltered candidates before filtering. Under AFR (D6), the query is blocked because unauthorized chunks never enter any model context.
 
@@ -594,7 +594,7 @@ This paper is a systematization; the primary artifact is the paper itself. To su
 
 \textbf{Artifact contents.} The artifact package includes: (i) vendor documentation analysis worksheets summarizing authorization capabilities and limitations for each system evaluated, (ii) the scoring rubric used to derive guarantee ratings in Tables~\ref{tab:matrix} and~\ref{tab:systems}, (iii) system trace examples for each violation pattern (D3, D4, broad-retrieve-then-redact), (iv) code snippets demonstrating each defense family's enforcement pattern, and (v) illustrative demonstration materials for Figures~\ref{fig:direct} and~\ref{fig:indirect}.
 
-\textbf{Illustrative demonstration reproducibility.} The screenshots in Figures~\ref{fig:direct} and~\ref{fig:indirect} were captured using the AegisRAG reference implementation. The artifact includes: (a) exact prompt text for each query, (b) role configuration (Junior HR), (c) mode selection (Vanilla RAG, Retrieve+Filter, Strict AFR), (d) expected outputs for each mode, and (e) raw screenshots. These materials allow reviewers to verify the failure mode demonstrations.
+\textbf{Illustrative demonstration reproducibility.} The screenshots in Figures~\ref{fig:direct} and~\ref{fig:indirect} were captured using a reference implementation. The implementation is not included in the anonymous artifact; we provide: (a) exact prompt text for each query, (b) role configuration (Junior HR), (c) mode selection (Vanilla RAG, Retrieve+Filter, Strict AFR), (d) representative outputs for each mode, and (e) raw screenshots. These materials allow reviewers to verify the qualitative failure mode demonstrations.
 
 \textbf{Reproducibility.} Running \texttt{make tables} regenerates Tables~\ref{tab:matrix} and~\ref{tab:systems} from the worksheets and rubric.
 
