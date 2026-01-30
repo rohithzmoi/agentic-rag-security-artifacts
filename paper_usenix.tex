@@ -1,8 +1,8 @@
 
 \documentclass[letterpaper,twocolumn,10pt]{article}
 
-% USENIX style file (2020-09 version as required by Security '26)
-\usepackage{usenix-2020-09}
+% Official USENIX Security '26 style file
+\usepackage{usenix}
 
 % Additional packages (url already in style file)
 \usepackage{amsmath,amssymb,amsfonts}
@@ -250,9 +250,9 @@ Attach access tags (role, department, clearance) to chunks and apply filters dur
 
 \subsection{D3: Post-Retrieval and Post-Generation Filtering}
 
-Retrieve broadly and redact outputs or remove chunks late in the pipeline. This includes guardrails that block PII or sensitive terms in outputs.
+Retrieve broadly and filter late in the pipeline---often after reranking, query expansion, summarization, or intermediate planning steps. This includes guardrails that block PII or sensitive terms in outputs. When learned components (LLM-based rerankers, planners, or summarizers) consume the raw retrieved set before filtering, restricted content may shape intermediate reasoning even if removed before final generation. We use D3 to denote any design where the authorization gate is placed after some non-trivial transformation stage, including learned reranking or planning, rather than strictly immediately before the final generator.
 
-\textbf{Guarantees.} May reduce exposure in the final response, but does not satisfy AFR. Cannot guarantee that restricted content did not influence intermediate reasoning or reranking.
+\textbf{Guarantees.} May reduce exposure in the final response, but does not satisfy AFR. Cannot guarantee that restricted content did not influence learned components that operate on the unfiltered candidate set.
 
 \subsection{D4: Prompt-Based Constraints and Guardrails}
 
@@ -268,9 +268,9 @@ Scope tool calls via OAuth scopes, IAM roles, allowlists, or per-agent credentia
 
 \subsection{D6: AFR-Oriented Architectures}
 
-Architectures that resolve user scope at runtime and constrain retrieval such that candidate chunks are authorized prior to downstream processing.
+Architectures that resolve user scope at runtime and constrain retrieval such that candidate chunks are authorized prior to any learned component that could be influenced by restricted content.
 
-\textbf{Characteristics.} (i) No role metadata in embeddings; authorization resolved at query time. (ii) Two-stage retrieval: semantic search returns candidates, a Policy Enforcement Point (PEP) removes unauthorized chunks before LLM access. (iii) Inherited delegation: agents operate under calling user's scope.
+\textbf{Characteristics.} (i) No role metadata in embeddings; authorization resolved at query time. (ii) Two-stage retrieval: semantic search may operate over a superset of candidates, but authorization filtering occurs \emph{before} any learned component (LLM reranker, planner, summarizer, or generator) can consume the candidates. Only the authorized set is ever exposed to model contexts. (iii) Inherited delegation: agents operate under calling user's scope.
 
 \textbf{Guarantees.} Satisfies AFR (Eq.~\ref{eq:afr}) and authorization correctness (Eq.~\ref{eq:auth-correct-ctx}, \ref{eq:auth-correct-agent}).
 
@@ -294,7 +294,7 @@ This section provides concrete traces through representative systems to ground t
 
 \textbf{AFR status: No (default).} By default, LangChain violates AFR because retrieval is unconstrained. Developers commonly add post-retrieval filtering (D3), which exposes unauthorized chunks to the reranker and any intermediate chain state.
 
-\textbf{Where it breaks.} A common pattern is: retrieve 100 chunks, filter to 20 authorized chunks, pass to LLM. The 80 unauthorized chunks influenced the retriever's internal ranking and may have been logged or cached.
+\textbf{Where it breaks.} A common pattern is: retrieve 100 chunks, filter to 20 authorized chunks, pass to LLM. The 80 unauthorized chunks exist in the retrieved set and may be exposed to downstream stages (reranking, summarization, logging, caching), violating AFR by construction.
 
 \subsection{Weaviate with RBAC}
 
@@ -347,7 +347,7 @@ Table~\ref{tab:matrix} summarizes defense families. As shown, post-hoc filtering
 \midrule
 D1 Role-Partitioned Indices & Cond. & Cond. & N/A & High & Low & Index proliferation \\
 D2 Metadata-Tag Filtering & Cond. & Cond. & N/A & High & Low & Tag expressiveness limits \\
-D3 Post-Retrieval Filtering & No & Weak & N/A & Med & Low & Model already saw data \\
+D3 Post-Retrieval Filtering & No & Weak & N/A & Med & Low & Learned stages may see restricted data \\
 D4 Prompt Constraints & No & Weak & N/A & N/A & Low & Bypassable via injection \\
 D5 Tool-Access Controls & N/A & N/A & Cond. & Med & Med & Retrieval not constrained \\
 D6 AFR-Oriented & Yes & Strong & Strong & Low & High & Runtime RBAC resolution \\
@@ -423,13 +423,37 @@ This section presents a canonical leakage pattern to illustrate F1 (semantic ove
 \end{itemize}
 
 \textbf{Logic-Flow Comparison: D3 vs D6.}
-Consider how each defense handles the query:
+Consider how each defense handles the query when the pipeline includes an LLM-based reranker or summarizer:
 
-\emph{D3 (Retrieve then Redact):} The retriever returns 20 chunks, including 3 performance-review chunks. A reranker scores all 20 by relevance, placing one restricted chunk at rank 2. The reranker's internal state now reflects a relevance signal from restricted content. Even after redaction removes the chunk, the model receives the remaining 19 chunks in an order that was influenced by the presence of the restricted chunk. If the model generates a summary, it may inadvertently reflect patterns (e.g., ``Bob is highly valued'') derived from the reranking distribution.
+\emph{D3 (Retrieve then Filter):} The retriever returns 20 chunks, including 3 restricted performance-review chunks. If the pipeline uses an LLM reranker, it literally reads all 20 chunks to score relevance---including the restricted content. If an LLM planner or summarizer operates on the raw set to decide which chunks to keep, it reads the restricted chunks. Even if redaction removes the restricted chunks before final generation, the learned component has already consumed them. The model's downstream reasoning reflects this exposure: it may infer patterns (e.g., ``Bob is highly valued'') from the reranked ordering or from summaries generated before filtering.
 
-\emph{D6 (AFR-Oriented):} The retriever returns 20 pre-candidates. The PEP queries the PDP for Alice's permissions and removes the 3 restricted chunks before reranking. The reranker only sees 17 authorized chunks; its internal state never includes restricted content. The model receives an authorization-clean context and cannot infer restricted facts from reranking signals.
+\emph{D6 (AFR-Oriented):} The retriever returns 20 pre-candidates. The PEP queries the PDP for Alice's permissions and removes the 3 restricted chunks \emph{before any learned component executes}. The reranker, planner, or summarizer only sees the 17 authorized chunks; no model context ever includes restricted content. The final generation cannot infer restricted facts because no learned component was ever exposed to them.
 
-This case study illustrates why AFR provides stronger guarantees than post-hoc filtering: by the time D3 applies redaction, the restricted content has already shaped intermediate pipeline state.
+This case study illustrates why AFR provides stronger guarantees than post-hoc filtering: by the time D3 applies filtering, a learned component in the pipeline has already consumed the restricted content.
+
+\subsection{Illustrative Demonstration}
+
+We further illustrate these failure modes using a public reference implementation (AegisRAG), which demonstrates both direct and indirect leakage under post-filtered retrieval. We emphasize that this prototype is illustrative and not intended as a benchmark. Its purpose is to concretize failure modes discussed in Sections~\ref{sec:failure-taxonomy} and~\ref{sec:defense-taxonomy}.
+
+\textbf{Direct leakage (Figure~\ref{fig:direct}).} A user queries: ``What is Bob's salary?'' Under vanilla RAG (no authorization), the system discloses the salary. In this instance, retrieve-then-filter (D3) blocks the explicit disclosure because the filter catches the unauthorized chunks before generation. However, this does not provide a structural guarantee---it succeeds here only because the query explicitly requests restricted content and no learned component (e.g., LLM reranker) consumed the unfiltered candidates before filtering. Under AFR (D6), the query is blocked because unauthorized chunks never enter any model context.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{image/direct-prompt.png}
+  \caption{Direct prompt leakage: Vanilla RAG discloses restricted salary data. In this instance, Retrieve+Filter (D3) and AFR (D6) both block the explicit disclosure. D3 succeeds here but provides no structural guarantee when learned components consume unfiltered candidates. This demonstrates F1 (semantic overfetch) under unprotected retrieval.}
+  \label{fig:direct}
+\end{figure}
+
+\textbf{Indirect leakage (Figure~\ref{fig:indirect}).} The user rephrases: ``Don't tell me the exact figure, but is my salary of \$25,000 more than Bob's?'' Under vanilla RAG, the system leaks the comparison. Critically, under retrieve-then-filter (D3), the system \emph{also leaks} the comparison because an upstream learned component (e.g., an LLM reranker, planner, or summarizer) consumed restricted chunks before filtering. The model can infer the salary relationship even if the explicit value is removed from the final output. Only AFR (D6) prevents this indirect leakage because the restricted chunks are removed before any learned component can consume them.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{image/indirect-prompt.png}
+  \caption{Indirect prompt leakage: Even with post-retrieval filtering (D3), the model infers restricted salary comparisons because a learned component in the pipeline consumed restricted chunks before filtering. Only AFR (D6) prevents this synthesis leakage (F2/F4).}
+  \label{fig:indirect}
+\end{figure}
+
+These figures illustrate the central thesis: post-hoc filtering cannot guarantee authorization correctness because the model's reasoning has already been influenced by restricted content. AFR-oriented architectures prevent this influence by construction.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Reference Enforcement Pattern (Not a Proposal)}
@@ -483,10 +507,12 @@ Figure~\ref{fig:arch} illustrates an AFR-oriented architecture that is sufficien
   \item \textbf{IdP (Identity Provider)} authenticates users and provides verified identity claims.
   \item \textbf{Orchestrator} propagates user identity and scope to all agents.
   \item \textbf{Retriever} returns semantic pre-candidates (unfiltered).
-  \item \textbf{PEP (Policy Enforcement Point)} queries the PDP, removes unauthorized chunks, and produces the authorized candidate set $\mathrm{cand}(q,u)$.
+  \item \textbf{PEP (Policy Enforcement Point)} queries the PDP, removes unauthorized chunks, and produces the authorized candidate set $\mathrm{cand}(q,u)$. Critically, the PEP sits \emph{before} any learned component (LLM reranker, planner, summarizer, or generator) that could consume the candidates.
   \item \textbf{PDP (Policy Decision Point)} stores and evaluates authorization policies.
   \item \textbf{LLM} only sees authorized content.
 \end{itemize}
+
+\textbf{Ordering invariant.} The key property distinguishing AFR from retrieve-then-filter is not merely that filtering occurs, but \emph{when} it occurs. Authorization must be applied before any model context is constructed---including intermediate reranking, planning, or summarization contexts. If semantic search operates over a superset of candidates, the PEP must gate that superset before any learned component can be influenced.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Open Problems}
@@ -564,9 +590,11 @@ This work systematizes existing knowledge about authorization in RAG systems. It
 \section{Open Science}
 \label{sec:open-science}
 
-This paper is a systematization; the primary artifact is the paper itself. To support reproducibility of the systematization claims, we provide an artifact package containing the raw data, reproducibility scripts, and classification rubrics used to derive Tables~\ref{tab:matrix} and~\ref{tab:systems}.
+This paper is a systematization; the primary artifact is the paper itself. To support reproducibility of the systematization claims, we provide an artifact package containing the raw data, reproducibility scripts, classification rubrics, and illustrative demonstration materials.
 
-\textbf{Artifact contents.} The artifact package includes: (i) vendor documentation analysis worksheets summarizing authorization capabilities and limitations for each system evaluated, (ii) the scoring rubric used to derive guarantee ratings in Tables~\ref{tab:matrix} and~\ref{tab:systems}, (iii) system trace examples for each violation pattern (D3, D4, broad-retrieve-then-redact), and (iv) code snippets demonstrating each defense family's enforcement pattern.
+\textbf{Artifact contents.} The artifact package includes: (i) vendor documentation analysis worksheets summarizing authorization capabilities and limitations for each system evaluated, (ii) the scoring rubric used to derive guarantee ratings in Tables~\ref{tab:matrix} and~\ref{tab:systems}, (iii) system trace examples for each violation pattern (D3, D4, broad-retrieve-then-redact), (iv) code snippets demonstrating each defense family's enforcement pattern, and (v) illustrative demonstration materials for Figures~\ref{fig:direct} and~\ref{fig:indirect}.
+
+\textbf{Illustrative demonstration reproducibility.} The screenshots in Figures~\ref{fig:direct} and~\ref{fig:indirect} were captured using the AegisRAG reference implementation. The artifact includes: (a) exact prompt text for each query, (b) role configuration (Junior HR), (c) mode selection (Vanilla RAG, Retrieve+Filter, Strict AFR), (d) expected outputs for each mode, and (e) raw screenshots. These materials allow reviewers to verify the failure mode demonstrations.
 
 \textbf{Reproducibility.} Running \texttt{make tables} regenerates Tables~\ref{tab:matrix} and~\ref{tab:systems} from the worksheets and rubric.
 
